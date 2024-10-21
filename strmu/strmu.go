@@ -36,20 +36,20 @@ func Join[T any](elems []T, sep ...string) (s string) {
 }
 
 // TrimPrefix 移除前缀
-func TrimPrefix(a string, prefix ...string) (s string) {
-	for _, x := range prefix {
-		if strings.HasPrefix(a, x) {
-			s = strings.TrimPrefix(a, x)
+func TrimPrefix(s string, a ...string) string {
+	for _, x := range a {
+		if strings.HasPrefix(s, x) {
+			s = strings.TrimPrefix(s, x)
 		}
 	}
 	return s
 }
 
 // TrimSuffix 移除后缀
-func TrimSuffix(a string, suffix ...string) (s string) {
-	for _, x := range suffix {
-		if strings.HasPrefix(a, x) {
-			s = strings.TrimPrefix(a, x)
+func TrimSuffix(s string, a ...string) string {
+	for _, x := range a {
+		if strings.HasPrefix(s, x) {
+			s = strings.TrimPrefix(s, x)
 		}
 	}
 	return s
@@ -97,4 +97,19 @@ func Rand(n int, symbols ...bool) (s string) {
 func SHA256(text string) string {
 	b := sha256.Sum256([]byte(text))
 	return strings.ToUpper(fmt.Sprintf("%x", b))
+}
+
+func Center(s, c string, width ...int) string {
+	switch c {
+	case "[":
+		return "[" + s + "]"
+	case "(":
+		return "(" + s + ")"
+	case "{":
+		return "{" + s + "}"
+	case "<":
+		return "<" + s + ">"
+	}
+	c = strings.Repeat(c, append(width, 0)[0])
+	return c + s + c
 }

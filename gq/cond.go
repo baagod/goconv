@@ -49,6 +49,10 @@ func (c *Cond) StrValue() string {
 	case "IN":
 		ss := strings.Split(strings.Trim(s, "[]"), " ")
 		return "(" + strings.Join(ss, ", ") + ")"
+	case "LIKE":
+		if !strings.HasPrefix(s, "%") && !strings.HasSuffix(s, "%") {
+			s = fmt.Sprint(`'%`, s, `%'`)
+		}
 	}
 
 	if _, ok := c.Value.(string); ok {
