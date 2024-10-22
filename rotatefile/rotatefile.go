@@ -85,7 +85,7 @@ func (w *Writer) rename(now time.Time) error {
 		_ = w.file.Close()
 	}
 	oldpath := w.filepath
-	newpath := oldpath + "." + now.Format("20060102150405")
+	newpath := oldpath + "." + now.Format("200601021504")
 	return os.Rename(oldpath, newpath)
 }
 
