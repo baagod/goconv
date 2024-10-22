@@ -51,7 +51,7 @@ func (c *Cond) StrValue() string {
 		return "(" + strings.Join(ss, ", ") + ")"
 	case "LIKE":
 		if !strings.HasPrefix(s, "%") && !strings.HasSuffix(s, "%") {
-			s = fmt.Sprint(`'%`, s, `%'`)
+			s = fmt.Sprint(`%`, s, `%`)
 		}
 	}
 
