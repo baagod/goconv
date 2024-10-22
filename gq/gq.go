@@ -2,92 +2,75 @@ package gq
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 )
 
 // Eq 等于 =
-func Eq(name string, v any) *Cond {
-	return &Cond{Name: name, Value: v, Operator: "="}
+func Eq[T any](name string, v T, skip ...func(T) bool) *Cond {
+	return &Cond{Name: name, Value: v, Opr: "=", isSkip: skip != nil && skip[0](v)}
 }
 
 // Gt 大于 >
-func Gt(name string, v any) *Cond {
-	return &Cond{Name: name, Value: v, Operator: ">"}
+func Gt[T any](name string, v T, skip ...func(T) bool) *Cond {
+	return &Cond{Name: name, Value: v, Opr: ">", isSkip: skip != nil && skip[0](v)}
 }
 
 // Ge 大于等于 ≥
-func Ge(name string, v any) *Cond {
-	return &Cond{Name: name, Value: v, Operator: ">="}
+func Ge[T any](name string, v T, skip ...func(T) bool) *Cond {
+	return &Cond{Name: name, Value: v, Opr: ">=", isSkip: skip != nil && skip[0](v)}
 }
 
 // Lt 小于 <
-func Lt(name string, v any) *Cond {
-	return &Cond{Name: name, Value: v, Operator: "<"}
+func Lt[T any](name string, v T, skip ...func(T) bool) *Cond {
+	return &Cond{Name: name, Value: v, Opr: "<", isSkip: skip != nil && skip[0](v)}
 }
 
 // Le 小于等于 ≤
-func Le(name string, v any) *Cond {
-	return &Cond{Name: name, Value: v, Operator: "<="}
+func Le[T any](name string, v T, skip ...func(T) bool) *Cond {
+	return &Cond{Name: name, Value: v, Opr: "<=", isSkip: skip != nil && skip[0](v)}
 }
 
 // Ne 不等于 != <>
-func Ne(name string, v any) *Cond {
-	return &Cond{Name: name, Value: v, Operator: "!="}
+func Ne[T any](name string, v T, skip ...func(T) bool) *Cond {
+	return &Cond{Name: name, Value: v, Opr: "!=", isSkip: skip != nil && skip[0](v)}
 }
 
 // Between 区间
-func Between(name string, first, second any) *Cond {
+func Between[T any](name string, first, second T, skip ...func(T, T) bool) *Cond {
 	return &Cond{
-		Name:     name,
-		Value:    [2]any{first, second},
-		Operator: "BETWEEN",
+		Name:   name,
+		Value:  [2]any{first, second},
+		Opr:    "BETWEEN",
+		isSkip: skip != nil && skip[0](first, second),
 	}
 }
 
 // In 范围
-func In(name string, a ...any) *Cond {
-	if len(a) == 1 {
+func In[T any](name string, a ...T) *Cond {
+	if a != nil {
+		// 是否切片或数组
 		if strings.HasPrefix(fmt.Sprintf("%T", a[0]), "[") {
-			return &Cond{Name: name, Value: a[0], Operator: "IN"}
+			return &Cond{Name: name, Value: a[0], Opr: "IN"}
 		}
 	}
-	return &Cond{Name: name, Value: a, Operator: "IN"}
+	return &Cond{Name: name, Value: a, Opr: "IN"}
 }
 
 // Like 模糊查询
-func Like(name string, v string) *Cond {
-	return &Cond{Name: name, Value: v, Operator: "LIKE"}
+func Like(name string, v string, skip ...func(string) bool) *Cond {
+	return &Cond{Name: name, Value: v, Opr: "LIKE", isSkip: skip != nil && skip[0](v)}
 }
 
 // Or 或者条件
-func Or(a ...Builder) *WhereBuilder {
-	return &WhereBuilder{List: a, Sep: "OR"}
+func Or(a ...Builder) *List {
+	return &List{Builders: a, Sep: "OR"}
 }
 
 // And 并且条件
-func And(a ...Builder) *WhereBuilder {
-	return &WhereBuilder{List: a, Sep: "AND"}
+func And(a ...Builder) *List {
+	return &List{Builders: a, Sep: "AND"}
 }
 
-func Where(a ...Builder) (sql string) {
-	re := regexp.MustCompile("^\n? +AND |\n? +AND $")
-	for _, c := range a {
-		s := c.SQL()
-		if s == "" {
-			continue
-		}
-
-		if _, ok := c.(*WhereBuilder); ok {
-			s += "\n"
-		}
-
-		if strings.HasSuffix(s, "\n") {
-			sql = re.ReplaceAllString(sql, "") + "\n  AND " + s + "  AND "
-		} else {
-			sql += s + " AND "
-		}
-	}
-
-	return re.ReplaceAllString(sql, "")
+func Where(a ...Builder) *WhereBuilder {
+	return &WhereBuilder{Builders: a}
 }
