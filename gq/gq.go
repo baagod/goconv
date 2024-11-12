@@ -58,7 +58,12 @@ func In[T any](name string, a ...T) *Cond {
 
 // Like 模糊查询
 func Like(name string, v string, skip ...func(string) bool) *Cond {
-	return &Cond{Name: name, Value: v, Opr: "LIKE", isSkip: skip != nil && skip[0](v)}
+	return &Cond{
+		Name:   name,
+		Value:  v,
+		Opr:    "LIKE",
+		isSkip: v == "" || skip != nil && skip[0](v),
+	}
 }
 
 // Or 或者条件
