@@ -1,4 +1,4 @@
-package aster
+package snowflake
 
 import (
 	"sync"
@@ -14,18 +14,18 @@ var (
 	seqMax    int64 = 1<<SeqBits - 1     // 最大序列号
 )
 
-type Aster struct {
+type Snowflake struct {
 	mu        sync.Mutex
 	node      int64
 	seq       int64
 	timestamp int64
 }
 
-func New(n int64) *Aster {
-	return &Aster{node: n}
+func New(n int64) *Snowflake {
+	return &Snowflake{node: n}
 }
 
-func (a *Aster) Next() int64 {
+func (a *Snowflake) Next() int64 {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -51,6 +51,6 @@ func (a *Aster) Next() int64 {
 	return seq
 }
 
-func (a *Aster) Time(seq int64) time.Time {
+func (a *Snowflake) Time(seq int64) time.Time {
 	return time.UnixMilli(Epoch + (seq >> 22))
 }
