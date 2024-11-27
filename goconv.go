@@ -25,3 +25,19 @@ func Delkey[M ~map[K]V, K comparable, V any](m M, keys ...K) M {
 
 	return dst
 }
+
+func Assign[K comparable, V any, Map ~map[K]V](maps ...Map) Map {
+	count := 0
+	for i := range maps {
+		count += len(maps[i])
+	}
+
+	out := make(Map, count)
+	for i := range maps {
+		for k := range maps[i] {
+			out[k] = maps[i][k]
+		}
+	}
+
+	return out
+}
