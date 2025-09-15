@@ -11,13 +11,11 @@ func TestName(t *testing.T) {
     cond := eq.Where(
         eq.Eq("name", "O'Malley"),
         eq.Eq("age1", 18),
-        eq.And(
-            eq.Or(
-                eq.And(eq.Between("time", "2010", "2019")),
-                // eq.Between("time", "2010", "2019"),
-                eq.Eq("height", 165),
-                eq.Eq("height", 175),
-            ),
+        eq.OrGroup(
+            eq.And(eq.Between("time", "2010", "2019")),
+            // eq.Between("time", "2010", "2019"),
+            eq.Eq("height", 165),
+            eq.Eq("height", 175),
         ),
         eq.And(
             eq.In("children", 1, 2, 3),

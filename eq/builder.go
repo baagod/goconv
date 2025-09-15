@@ -112,6 +112,7 @@ type List struct {
 	Builders []Builder
 	Sep      string // WHERE 条件分隔符
 	indent   int    // 用于存储每行开头的基础缩进
+	isGroup  bool
 }
 
 func (lst *List) Append(a ...Builder) *List {
@@ -181,7 +182,7 @@ func (lst *List) format(baseIndent ...int) (string, []any) {
 		}
 
 		allArgs = append(allArgs, args...)
-		if part, ok := x.(*List); ok && part.Sep == "AND" {
+		if part, ok := x.(*List); ok && (part.Sep == "AND" || part.isGroup) {
 			parts[i] = true
 		}
 

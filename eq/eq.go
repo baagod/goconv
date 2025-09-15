@@ -71,6 +71,10 @@ func Or(a ...Builder) *List {
 	return &List{Builders: a, Sep: "OR"}
 }
 
+func OrGroup(a ...Builder) *List {
+	return &List{Builders: a, Sep: "OR", isGroup: true}
+}
+
 // And 并且条件
 func And(a ...Builder) *List {
 	return &List{Builders: a, Sep: "AND"}
