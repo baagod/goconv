@@ -6,6 +6,10 @@ import (
 	"strings"
 )
 
+var (
+	DefaultPlaceholder = questionFormat{}
+)
+
 type Placeholder interface {
 	ReplacePlaceholders(sql string) string
 }
@@ -36,7 +40,7 @@ func (d Dialect) OrEq(name string, values ...any) *List {
 
 var (
 	// Question 占位符作为 (?)
-	Question = Dialect{Formatter: questionFormat{}}
+	Question = Dialect{Formatter: DefaultPlaceholder}
 
 	// Dollar 占位符为 ($1, $2, $3)
 	Dollar = Dialect{Formatter: dollarFormat{}}
