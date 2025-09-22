@@ -1,9 +1,5 @@
 package eq
 
-import (
-    "reflect"
-)
-
 // Eq 等于 =
 func Eq[T any](name string, value T, skip ...func(v T) bool) *Cond[T] {
     return NewCond(name, value, "=", skip...)
@@ -99,16 +95,4 @@ func AndLine(a ...Builder) *List {
 
 func Where(a ...Builder) *List {
     return And(a...).Indent(2)
-}
-
-func isZero(v any) bool {
-    //goland:noinspection GoDfaConstantCondition
-    if v == nil || v == false || v == 0 || v == "" {
-        return true
-    }
-    return reflect.ValueOf(v).IsZero()
-}
-
-func isNil(v any) bool {
-    return v == nil
 }
