@@ -6,6 +6,9 @@ import (
 	"time"
 )
 
+// Builder 是 SQL 条件构造器的核心接口。
+// 约定：任何直接实现此接口的类型，其 SQL() 方法必须返回带有 "?" 占位符的原始 SQL。
+// 如需生成其他占位符（如 $1, :1），请使用 List 包装器（如 Dollar.Where(), Colon.And()）。
 type Builder interface {
 	SQL() (string, []any)
 }
@@ -14,7 +17,7 @@ type Cond[T any] struct {
 	Name     string
 	Value    T
 	Operator string
-	IsSkip   bool
+	IsOmit   bool
 }
 
 func NewCond[T any](name string, value T, operator string, skip ...func(v T) bool) *Cond[T] {
@@ -22,29 +25,29 @@ func NewCond[T any](name string, value T, operator string, skip ...func(v T) boo
 		Name:     name,
 		Value:    value,
 		Operator: operator,
-		IsSkip:   len(skip) > 0 && skip[0] != nil && skip[0](value),
+		IsOmit:   len(skip) > 0 && skip[0](value),
 	}
 }
 
-func (c *Cond[T]) Skip(skip bool) *Cond[T] {
-	c.IsSkip = skip
+func (c *Cond[T]) Omit(skip bool) *Cond[T] {
+	c.IsOmit = skip
 	return c
 }
 
-func (c *Cond[T]) SkipZero() *Cond[T] {
-	c.IsSkip = isZero(c.Value)
+func (c *Cond[T]) OmitZero() *Cond[T] {
+	c.IsOmit = isZero(c.Value)
 	return c
 }
 
-func (c *Cond[T]) SkipFn(f func(value T) bool) *Cond[T] {
+func (c *Cond[T]) OmitFn(f func(value T) bool) *Cond[T] {
 	if f != nil {
-		c.IsSkip = f(c.Value)
+		c.IsOmit = f(c.Value)
 	}
 	return c
 }
 
 func (c *Cond[T]) SQL() (sql string, args []any) {
-	if c.IsSkip {
+	if c.IsOmit {
 		return "", nil
 	}
 
@@ -60,10 +63,23 @@ func (c *Cond[T]) SQL() (sql string, args []any) {
 	case Builder:
 		sql, args = v.SQL()
 	default:
-		sql, args = "?", []any{c.Value}
+		sql, args = c.toSQL()
 	}
 
 	return fmt.Sprintf("%s %s %s", c.Name, c.Operator, sql), args
+}
+
+func (c *Cond[T]) toSQL() (string, []any) {
+	switch c.Operator {
+	case "LIKE", "NOT LIKE":
+		value := any(c.Value).(string)
+		if !strings.HasPrefix(value, "%") && !strings.HasSuffix(value, "%") {
+			value = "%" + value + "%"
+		}
+		return "?", []any{value}
+	}
+
+	return "?", []any{c.Value}
 }
 
 type BETWEEN struct {
@@ -78,53 +94,38 @@ func (b *BETWEEN) SQL() (string, []any) {
 	return "? AND ?", []any{b.first, b.second}
 }
 
-type IN struct {
-	values []any
+type IN[T any] struct {
+	values []T
 }
 
-func (in *IN) SQL() (string, []any) {
-	length := len(in.values)
-	if length == 0 {
+func (in *IN[T]) SQL() (string, []any) {
+	if len(in.values) == 0 {
 		return "", nil
 	}
 
-	placeholders := make([]string, length)
-	for i := range in.values {
+	args := make([]any, len(in.values))
+	placeholders := make([]string, len(in.values))
+
+	for i, x := range in.values {
 		placeholders[i] = "?"
+		args[i] = x
 	}
 
-	return "(" + strings.Join(placeholders, ", ") + ")", in.values
-}
-
-type LIKE struct {
-	value string
-}
-
-func (l *LIKE) SQL() (string, []any) {
-	if l.value == "" {
-		return "", nil
-	}
-
-	value := l.value
-	if !strings.HasPrefix(l.value, "%") && !strings.HasSuffix(l.value, "%") {
-		value = "%" + l.value + "%"
-	}
-
-	return "?", []any{value}
+	return "(" + strings.Join(placeholders, ", ") + ")", args
 }
 
 // ----
 
 type List struct {
-	Builders    []Builder
-	Sep         string // WHERE 条件分隔符
-	indent      int    // 用于存储每行开头的基础缩进
-	enter       bool   // 在格式化时，是否为该 List 开启一个新行
-	placeholder Placeholder
+	Builders []Builder
+	Sep      string // WHERE 条件分隔符
+	Dialect  Placeholder
+	indent   int  // 用于存储每行开头的基础缩进
+	enter    bool // 在格式化时，是否为该 List 开启新行
 }
 
-func (l *List) Placeholder(format Placeholder) *List {
-	l.placeholder = format
+func (l *List) Placeholder(p Placeholder) *List {
+	l.Dialect = p
 	return l
 }
 
@@ -140,82 +141,105 @@ func (l *List) Indent(width int) *List {
 	return l
 }
 
+func (l *List) Enter(enter bool) *List {
+	l.enter = enter
+	return l
+}
+
 func (l *List) IsIndent() bool {
 	return l.indent > 0
 }
 
 func (l *List) SQL() (string, []any) {
-	sql, args := l.format()
-	return l.placeholder.ReplacePlaceholders(sql), args
-}
+	if l.IsIndent() {
+		sql, args := l.format()
+		return l.Dialect.ReplacePlaceholders(sql), args
+	}
 
-// collect 辅助方法
-func (l *List) collect() (sqls []string, groups []*List, allArgs []any) {
-	parts := map[int]bool{}
-	isFormat := l.IsIndent()
+	var sqls []string
+	var allArgs []any
 
-	for i, x := range l.Builders {
+	for _, x := range l.Builders {
 		sql, args := x.SQL()
 		if sql == "" {
 			continue
 		}
 
-		if allArgs = append(allArgs, args...); !isFormat {
-			sqls = append(sqls, sql)
-			continue
+		sqls = append(sqls, sql)
+		allArgs = append(allArgs, args...)
+	}
+
+	if len(sqls) == 0 {
+		return "", nil
+	}
+
+	sql := strings.Join(sqls, fmt.Sprintf(" %s ", l.Sep))
+	if l.Sep == "OR" && len(sqls) > 1 {
+		sql = "(" + sql + ")"
+	}
+
+	return l.Dialect.ReplacePlaceholders(sql), allArgs
+}
+
+func (l *List) format(baseIndent ...int) (string, []any) {
+	if len(l.Builders) == 0 {
+		return "", nil
+	}
+
+	indent := l.indent
+	if indent == 0 {
+		if len(baseIndent) == 0 {
+			baseIndent = append(baseIndent, 2)
+		}
+		indent = baseIndent[0]
+	}
+
+	var groups []*List
+	var allArgs []any
+	var lines []string
+	breaks := map[int]bool{}
+
+	for i, x := range l.Builders {
+		group, ok := x.(*List)
+		if ok && (group.Sep == "AND" || group.enter) {
+			if len(group.Builders) == 0 {
+				continue
+			}
+			breaks[i] = true
 		}
 
-		if part, ok := x.(*List); ok && (part.Sep == "AND" || part.enter) {
-			parts[i] = true
-		}
-
-		if len(groups) == 0 || parts[i] || parts[i-1] {
+		if len(groups) == 0 || breaks[i] || breaks[i-1] {
 			groups = append(groups, &List{Builders: []Builder{x}, Sep: l.Sep})
 		} else {
 			groups[len(groups)-1].Append(x)
 		}
 	}
 
-	return
-}
-
-func (l *List) format(baseIndent ...int) (string, []any) {
-	sqls, groups, allArgs := l.collect()
-
-	if len(groups) == 0 { // 非格式化 SQL
-		if len(sqls) == 0 {
-			return "", nil
-		}
-
-		sql := strings.Join(sqls, fmt.Sprintf(" %s ", l.Sep))
-		if l.Sep == "OR" && len(sqls) > 1 {
-			sql = "(" + sql + ")"
-		}
-
-		return sql, allArgs
-	}
-
-	indent := l.indent
-	if len(baseIndent) > 0 {
-		indent = baseIndent[0]
-	}
-
-	var lines []string
 	for _, group := range groups {
-		var groupSQLs []string
-		for _, b := range group.Builders {
-			var sql string
-			if x, ok := b.(*List); ok {
-				sql, _ = x.format(indent)
-			} else {
-				sql, _ = b.SQL()
-			}
+		var sqls []string
+		var args []any
+		var sql string
 
-			groupSQLs = append(groupSQLs, sql)
+		for _, b := range group.Builders {
+			if x, ok := b.(*List); ok {
+				sql, args = x.format(indent)
+			} else {
+				sql, args = b.SQL()
+			}
+			if sql != "" {
+				allArgs = append(allArgs, args...)
+				sqls = append(sqls, sql)
+			}
 		}
 
-		line := strings.Join(groupSQLs, fmt.Sprintf(" %s ", group.Sep))
-		lines = append(lines, line)
+		if len(sqls) > 0 {
+			line := strings.Join(sqls, fmt.Sprintf(" %s ", group.Sep))
+			lines = append(lines, line)
+		}
+	}
+
+	if len(lines) == 0 {
+		return "", nil
 	}
 
 	// 这里是为了对齐 AND，就是不知道有没有更好的办法。
@@ -233,6 +257,9 @@ func (l *List) format(baseIndent ...int) (string, []any) {
 	return sql, allArgs
 }
 
+// Debug 将 Builder 转换为可直接执行的 SQL 调试字符串。
+// 它会将 SQL 中的 "?" 占位符替换为实际参数值（并进行转义）。
+// 要求：传入的 Builder 或其子元素，其 SQL() 方法必须返回带 "?" 占位符的 SQL。
 func Debug(b Builder) string {
 	var sql string
 	var args []any
@@ -243,24 +270,15 @@ func Debug(b Builder) string {
 		sql, args = b.SQL()
 	}
 
-	// 安全检查：分割后的片段数必须比参数数量多 1
-	// 例如: "a = ? AND b = ?" -> conds: ["a = ", " AND b = ", ""], len=3; args: [val1, val2], len=2
-	conds := strings.Split(sql, "?")
-	if len(conds)-1 != len(args) {
-		return fmt.Sprintf(
-			"/* DEBUGGER WARNING: Mismatch between %d placeholders and %d arguments */ %s",
-			len(conds)-1, len(args), sql,
-		)
-	}
-
-	// 使用 strings.Builder 高效地交替拼接
 	var sb strings.Builder
-	for i, x := range conds {
-		if sb.WriteString(x); i < len(args) {
-			sb.WriteString(debug(args[i]))
-		}
+	sqls := strings.Split(sql, "?")
+
+	for i, x := range sqls[:len(sqls)-1] {
+		sb.WriteString(x)
+		sb.WriteString(debug(args[i]))
 	}
 
+	sb.WriteString(sqls[len(sqls)-1])
 	return sb.String()
 }
 
@@ -276,6 +294,8 @@ func debug(value any) string {
 		return v.Format("'2006-01-02 15:04:05'")
 	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, bool:
 		return fmt.Sprint(v)
+	case []byte:
+		return string(v)
 	default:
 		return "'" + strings.ReplaceAll(fmt.Sprint(v), "'", "''") + "'"
 	}

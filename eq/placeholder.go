@@ -1,13 +1,24 @@
 package eq
 
 import (
-	"bytes"
-	"fmt"
+	"strconv"
 	"strings"
 )
 
 var (
-	DefaultPlaceholder = questionFormat{}
+	// Question 占位符作为 (?)
+	Question = Dialect{Placeholder: "?"}
+
+	// Dollar 占位符为 ($1, $2, $3)
+	Dollar = Dialect{Placeholder: "$"}
+
+	// Colon 占位符为 (:1, :2, :3）
+	Colon = Dialect{Placeholder: ":"}
+
+	// AtP 占位符为 (@p1, @p2, @p3)
+	AtP = Dialect{Placeholder: "@"}
+
+	DefaultPlaceholder = Question
 )
 
 type Placeholder interface {
@@ -15,107 +26,44 @@ type Placeholder interface {
 }
 
 type Dialect struct {
-	Formatter Placeholder
+	Placeholder string
 }
 
 func (d Dialect) Where(a ...Builder) *List {
-	return Where(a...).Placeholder(d.Formatter)
+	return Where(a...).Placeholder(d)
 }
 
 func (d Dialect) And(a ...Builder) *List {
-	return And(a...).Placeholder(d.Formatter)
+	return And(a...).Placeholder(d)
 }
 
 func (d Dialect) Or(a ...Builder) *List {
-	return Or(a...).Placeholder(d.Formatter)
+	return Or(a...).Placeholder(d)
 }
 
 func (d Dialect) OrLine(a ...Builder) *List {
-	return OrLine(a...).Placeholder(d.Formatter)
+	return OrLine(a...).Placeholder(d)
 }
 
-func (d Dialect) OrEq(name string, values ...any) *List {
-	return OrEq(name, values...).Placeholder(d.Formatter)
+func (d Dialect) ReplacePlaceholders(sql string) string {
+	if d.Placeholder == "?" {
+		return sql
+	}
+	return ReplacePositionalPlaceholders(sql, d.Placeholder)
 }
 
-var (
-	// Question 占位符作为 (?)
-	Question = Dialect{Formatter: DefaultPlaceholder}
-
-	// Dollar 占位符为 ($1, $2, $3)
-	Dollar = Dialect{Formatter: dollarFormat{}}
-
-	// Colon 占位符为 ($1, $2, $3）
-	Colon = Dialect{Formatter: colonFormat{}}
-
-	// AtP 占位符为 (@p1, @p2, @p3)
-	AtP = Dialect{Formatter: atpFormat{}}
-)
-
-type questionFormat struct{}
-
-func (questionFormat) Placeholder() string {
-	return "?"
-}
-
-func (questionFormat) ReplacePlaceholders(sql string) string {
-	return sql
-}
-
-type dollarFormat struct{}
-
-func (dollarFormat) Placeholder() string {
-	return "$"
-}
-
-func (dollarFormat) ReplacePlaceholders(sql string) string {
-	return replacePositionalPlaceholders(sql, "$")
-}
-
-type colonFormat struct{}
-
-func (colonFormat) Placeholder() string {
-	return ":"
-}
-
-func (colonFormat) ReplacePlaceholders(sql string) string {
-	return replacePositionalPlaceholders(sql, ":")
-}
-
-type atpFormat struct{}
-
-func (atpFormat) Placeholder() string {
-	return "@p"
-}
-
-func (atpFormat) ReplacePlaceholders(sql string) string {
-	return replacePositionalPlaceholders(sql, "@p")
-}
-
-func replacePositionalPlaceholders(sql, prefix string) string {
-	buf := &bytes.Buffer{}
-	i := 0
-	for {
-		p := strings.Index(sql, "?")
-		if p == -1 {
-			break
-		}
-
-		if len(sql[p:]) > 1 && sql[p:p+2] == "??" { // escape ?? => ?
-			buf.WriteString(sql[:p])
-			buf.WriteString("?")
-			if len(sql[p:]) == 1 {
-				break
-			}
-			sql = sql[p+2:]
-		} else {
-			i++
-			buf.WriteString(sql[:p])
-			_, _ = fmt.Fprintf(buf, "%s%d", prefix, i)
-			sql = sql[p+1:]
-		}
+func ReplacePositionalPlaceholders(sql, prefix string) string {
+	sqls := strings.Split(sql, "?")
+	if len(sqls) == 1 {
+		return sql
 	}
 
-	buf.WriteString(sql)
-	return buf.String()
+	var sb strings.Builder
+	for i, x := range sqls[:len(sqls)-1] {
+		sb.WriteString(x + prefix)
+		sb.WriteString(strconv.Itoa(i + 1))
+	}
+
+	sb.WriteString(sqls[len(sqls)-1])
+	return sb.String()
 }

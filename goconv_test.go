@@ -9,20 +9,8 @@ import (
 
 func TestName(t *testing.T) {
 	cond := eq.Dollar.Where(
-		// eq.Eq("name", "NAME"),
-		// eq.Eq("age", 18),
-		eq.OrLine(
-			eq.And(
-				eq.Eq("a", 1),
-				eq.Eq("a", 2),
-			),
-			eq.Eq("a", 2),
-		),
-		// eq.And(
-		// 	eq.Eq("a", 2),
-		// 	eq.Eq("a", 2),
-		// 	eq.And(eq.Eq("b", 3)),
-		// ),
+		eq.Eq("name", "NAME"),
+		eq.Eq("age", 18),
 	)
 
 	sql, args := cond.SQL()
