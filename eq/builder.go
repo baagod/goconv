@@ -65,6 +65,10 @@ func (c *Cond[T]) SQL() (sql string, args []any) {
 		sql, args = c.toSQL()
 	}
 
+	if sql == "" {
+		return "", nil
+	}
+
 	return fmt.Sprintf("%s %s %s", c.Name, c.Operator, sql), args
 }
 
@@ -72,9 +76,14 @@ func (c *Cond[T]) toSQL() (string, []any) {
 	switch c.Operator {
 	case "LIKE", "NOT LIKE":
 		value := any(c.Value).(string)
+		if value == "" {
+			return "", nil
+		}
+
 		if !strings.HasPrefix(value, "%") && !strings.HasSuffix(value, "%") {
 			value = "%" + value + "%"
 		}
+
 		return "?", []any{value}
 	}
 
@@ -225,6 +234,7 @@ func (l *List) format(baseIndent ...int) (string, []any) {
 			} else {
 				sql, args = b.SQL()
 			}
+
 			if sql != "" {
 				allArgs = append(allArgs, args...)
 				sqls = append(sqls, sql)

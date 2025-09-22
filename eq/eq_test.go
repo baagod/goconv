@@ -6,13 +6,16 @@ import (
 )
 
 func TestEq(t *testing.T) {
-	cond := Dollar.Where(
-		Eq("name", "NAME"),
-		Eq("age", 18),
-		In("a", []int{3, 4}),
+	where := And( // 只搜医生
+		Like("d.name", ""),
+		// Lt("d.id", 0).OmitZero(),
 	)
 
-	sql, args := cond.SQL()
+	// where.Append(
+	// 	Like("h.name", ""),
+	// )
+
+	sql, args := where.SQL()
 	fmt.Println(sql, args)
 	// fmt.Println("--------------------")
 	// fmt.Println(Debug(cond))
